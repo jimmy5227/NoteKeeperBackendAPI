@@ -3,15 +3,16 @@ Personal note keeper project. Backend API REST Interface that supports, creation
 
 ## v1
 Domain (Hosted on Free Tier)
-mynotekeeper-cec7hdbxfkc2hgf6.eastus-01.azurewebsites.net
+[a link](mynotekeeper-cec7hdbxfkc2hgf6.eastus-01.azurewebsites.net)
 
 ## v2
 Domain (Hosted on Free Tier)
-hw2mynotekeeper-gwh0ayc4epgac7hu.eastus-01.azurewebsites.net
+[a link](hw2mynotekeeper-gwh0ayc4epgac7hu.eastus-01.azurewebsites.net)
 
 ## v3
 Domain (Hosted on Basic Tier) [Grading in Progress]
-hw3mynotekeeper-cghmekbgfwc9cehd.eastus-01.azurewebsites.net
+[a link](hw3mynotekeeper-cghmekbgfwc9cehd.eastus-01.azurewebsites.net)
 
 ## v4
 Domain (Hosted on Basic Tier) [Assignment due 4/3/2025]
+[a link]()
