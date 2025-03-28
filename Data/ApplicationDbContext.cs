@@ -1,7 +1,7 @@
-using HW3NoteKeeper.DataTransferObjects;
+using HW4NoteKeeper.DataTransferObjects;
 using Microsoft.EntityFrameworkCore;
 
-namespace HW3NoteKeeper.Data
+namespace HW4NoteKeeper.Data
 {
     /// <summary>
     /// Represents the application's database context for managing notes and tags.

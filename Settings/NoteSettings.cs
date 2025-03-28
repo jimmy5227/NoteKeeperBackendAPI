@@ -1,4 +1,4 @@
-namespace HW3NoteKeeper.Settings;
+namespace HW4NoteKeeper.Settings;
 
 /// <summary>
 /// Provides configuration settings related to note management.

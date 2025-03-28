@@ -1,9 +1,9 @@
 using System.Text.Json;
 using NJsonSchema;
 using Microsoft.Extensions.AI;
-using HW3NoteKeeper.Settings;
+using HW4NoteKeeper.Settings;
 
-namespace HW3NoteKeeper.Services
+namespace HW4NoteKeeper.Services
 {
     /// <summary>
     /// Defines a service for generating tags based on input details using an AI model.

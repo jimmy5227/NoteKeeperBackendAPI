@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using HW3NoteKeeper.Data;
-using HW3NoteKeeper.DataTransferObjects;
-using HW3NoteKeeper.CustomSettings;
+using HW4NoteKeeper.Data;
+using HW4NoteKeeper.DataTransferObjects;
+using HW4NoteKeeper.CustomSettings;
 using System.Text.Json;
 
-namespace HW3NoteKeeper.BlobController
+namespace HW4NoteKeeper.AttachmentsController
 {
     /// <summary>
     /// Controller for handling blob operations related to note attachments.
@@ -14,7 +14,7 @@ namespace HW3NoteKeeper.BlobController
     [Route("api/v1/[controller]")]
     [Produces("application/json")]
     [ApiController]
-    public class NoteAttachmentsBlobController : ControllerBase
+    public class NoteAttachmentsController : ControllerBase
     {
         private const string GetPublicFileByIdRouteName = nameof(GetPublicFileByIdRouteName);
         private const string CustomMetadata = nameof(CustomMetadata);
@@ -25,19 +25,19 @@ namespace HW3NoteKeeper.BlobController
         /// </summary>
         public IConfiguration Configuration { get; set; }
 
-        private readonly ILogger<NoteAttachmentsBlobController> _logger;
+        private readonly ILogger<NoteAttachmentsController> _logger;
         private readonly ApplicationDbContext _context;
         private readonly LoggingEvents _loggingEvents;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="NoteAttachmentsBlobController"/> class.
+        /// Initializes a new instance of the <see cref="NoteAttachmentsController"/> class.
         /// </summary>
         /// <param name="configuration">Application configuration.</param>
         /// <param name="logger">Logger instance.</param>
         /// <param name="context">Database context.</param>
         /// <param name="loggingEvents">Logging events instance.</param>
-        public NoteAttachmentsBlobController(IConfiguration configuration,
-                                               ILogger<NoteAttachmentsBlobController> logger,
+        public NoteAttachmentsController(IConfiguration configuration,
+                                               ILogger<NoteAttachmentsController> logger,
                                                ApplicationDbContext context,
                                                LoggingEvents loggingEvents)
         {

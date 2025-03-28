@@ -1,15 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
-using HW3NoteKeeper.Settings;
-using HW3NoteKeeper.Data;
-using HW3NoteKeeper.DataTransferObjects;
+using HW4NoteKeeper.Settings;
+using HW4NoteKeeper.Data;
+using HW4NoteKeeper.DataTransferObjects;
 using NJsonSchema;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 using Azure.Storage.Blobs;
-using HW3NoteKeeper.Services;
+using HW4NoteKeeper.Services;
 
-namespace HW3NoteKeeper.Controllers
+namespace HW4NoteKeeper.Controllers
 {
     /// <summary>
     /// API Controller for managing notes, including creation, updating, retrieval, and deletion.
