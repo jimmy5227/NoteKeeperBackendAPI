@@ -1,4 +1,4 @@
-namespace HW2NoteKeeper.Settings
+namespace HW3NoteKeeper.Settings
 {
     /// <summary>
     /// Represents configuration settings for integrating with the AI service.

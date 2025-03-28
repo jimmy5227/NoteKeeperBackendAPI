@@ -1,15 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
-using HW2NoteKeeper.Settings;
-using HW2NoteKeeper.Data;
-using HW2NoteKeeper.DataTransferObjects;
+using HW3NoteKeeper.Settings;
+using HW3NoteKeeper.Data;
+using HW3NoteKeeper.DataTransferObjects;
 using NJsonSchema;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using HW2NoteKeeper.Common; // <-- Ensure namespace matches your TelemetryService location
+using Azure.Storage.Blobs;
+using HW3NoteKeeper.Services;
 
-namespace HW2NoteKeeper.Controllers
+namespace HW3NoteKeeper.Controllers
 {
     /// <summary>
     /// API Controller for managing notes, including creation, updating, retrieval, and deletion.
@@ -23,7 +23,8 @@ namespace HW2NoteKeeper.Controllers
         private readonly AISettings _aISettings;
         private readonly ApplicationDbContext _context;
         private readonly int _maxNotes;
-        private readonly TelemetryService _telemetryService;
+        private readonly ITagGeneratorService _tagGeneratorService;
+        private readonly IConfiguration _configuration;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="NoteController"/> class.
@@ -33,21 +34,22 @@ namespace HW2NoteKeeper.Controllers
         /// <param name="logger">The logger instance for logging operations.</param>
         /// <param name="context">The application's database context.</param>
         /// <param name="configuration">The configuration instance used to retrieve application settings.</param>
-        /// <param name="telemetryService">A service to track events, exceptions, and validation errors.</param>
+        /// <param name="tagGeneratorService">Service for generating tags using AI.</param>
         public NoteController(
             IChatClient chatClient,
             AISettings aISettings,
             ILogger<NoteController> logger,
             ApplicationDbContext context,
             IConfiguration configuration,
-            TelemetryService telemetryService)
+            ITagGeneratorService tagGeneratorService)
         {
             _logger = logger;
             _chatClient = chatClient;
             _aISettings = aISettings;
             _context = context;
-            _maxNotes = configuration.GetValue<int>("NoteSettings:MaxNotes", 10); // Default to 10
-            _telemetryService = telemetryService;
+            _configuration = configuration;
+            _maxNotes = configuration.GetValue<int>("NoteSettings:MaxNotes", 10);
+            _tagGeneratorService = tagGeneratorService;
         }
 
         /// <summary>
@@ -65,7 +67,7 @@ namespace HW2NoteKeeper.Controllers
         /// Creates a new note, generates AI-based tags, and stores it in the database.
         /// </summary>
         /// <param name="request">The note details including summary and content.</param>
-        /// <returns>Returns the created note.</returns>
+        /// <returns>The created note.</returns>
         /// <response code="201">Successfully created the note.</response>
         /// <response code="400">Invalid summary or details input.</response>
         /// <response code="403">Note limit reached (MaxNotes exceeded).</response>
@@ -77,20 +79,6 @@ namespace HW2NoteKeeper.Controllers
         [ProducesResponseType(500)]
         public async Task<IActionResult> CreateNote([FromBody, Required] CreateNoteRequest request)
         {
-            // Validate note input constraints
-            if (string.IsNullOrWhiteSpace(request.Summary) || request.Summary.Length > 60 ||
-                string.IsNullOrWhiteSpace(request.Details) || request.Details.Length > 1024)
-            {
-                // Log validation error
-                _telemetryService.TrackValidationError(
-                    "Invalid summary or details. Check constraints.",
-                    request
-                );
-
-                return BadRequest("Invalid summary or details. Check constraints.");
-            }
-
-            // Check if note limit has been reached
             int noteCount = await _context.Notes.CountAsync();
             if (noteCount >= _maxNotes)
             {
@@ -99,8 +87,7 @@ namespace HW2NoteKeeper.Controllers
                                statusCode: 403);
             }
 
-            // Generate tags for the note details using AI
-            var generatedTags = await GenerateTags(request.Details);
+            var generatedTags = await _tagGeneratorService.GenerateTagsAsync(request.Details);
             if (generatedTags.Count == 0)
             {
                 return Problem(title: "AI Tag Generation Failed",
@@ -108,7 +95,6 @@ namespace HW2NoteKeeper.Controllers
                                statusCode: 500);
             }
 
-            // Create a new note object with generated tags.
             var note = new Note
             {
                 Summary = request.Summary,
@@ -122,29 +108,19 @@ namespace HW2NoteKeeper.Controllers
                 }).ToList()
             };
 
-            // Add the note to the database and save changes
             _context.Notes.Add(note);
             await _context.SaveChangesAsync();
             _logger.LogInformation($"Note created with ID: {note.Id}");
 
-            // Telemetry: track "NoteCreated" event
-            _telemetryService.TrackNoteCreatedEvent(
-                note.Summary,
-                note.Summary.Length,
-                note.Details.Length,
-                note.Tags.Count
-            );
-
-            // Return the created note
             return CreatedAtAction(nameof(GetNoteById), new { id = note.Id }, note);
         }
 
         /// <summary>
-        /// Updates the summary/details of an existing note, regenerating tags if details change.
+        /// Updates the summary and/or details of an existing note, regenerating tags if details change.
         /// </summary>
-        /// <param name="id">The note ID (must be non-empty and exist).</param>
-        /// <param name="request">The update payload containing optional <c>summary</c> and <c>details</c> fields.</param>
-        /// <returns>No content if the update succeeds; appropriate error code otherwise.</returns>
+        /// <param name="id">The note ID.</param>
+        /// <param name="request">The update payload containing optional summary and details fields.</param>
+        /// <returns>No content if the update succeeds; an error response otherwise.</returns>
         [HttpPatch("/notes/{id}")]
         [ProducesResponseType(204)]
         [ProducesResponseType(400)]
@@ -154,35 +130,31 @@ namespace HW2NoteKeeper.Controllers
         {
             if (id == Guid.Empty)
             {
-                _telemetryService.TrackValidationError("Invalid note ID.", request);
                 return BadRequest("Invalid note ID.");
             }
 
-            // Retrieve the note along with its associated tags.
             var note = await _context.Notes.Include(n => n.Tags).FirstOrDefaultAsync(n => n.Id == id);
             if (note == null)
+            {
                 return NotFound();
+            }
 
-            // Determine if summary/details are provided
             bool summaryProvided = !string.IsNullOrWhiteSpace(request.Summary);
             bool detailsProvided = !string.IsNullOrWhiteSpace(request.Details);
             bool scalarUpdated = false;
 
-            // Update the summary only if the request provides a non-empty string.
             if (summaryProvided)
             {
                 note.Summary = request.Summary!;
                 scalarUpdated = true;
             }
 
-            // Update the details only if a non-empty string is provided.
             if (detailsProvided)
             {
                 note.Details = request.Details!;
                 scalarUpdated = true;
             }
 
-            // If any scalar property was updated, update ModifiedDateUtc and save changes.
             if (scalarUpdated)
             {
                 note.ModifiedDateUtc = DateTimeOffset.UtcNow;
@@ -192,18 +164,14 @@ namespace HW2NoteKeeper.Controllers
                 }
                 catch (DbUpdateConcurrencyException ex)
                 {
-                    // Log exception
-                    _telemetryService.TrackException(ex, request);
                     _logger.LogError(ex, "Concurrency error updating note scalars for id {NoteId}", id);
                     return Conflict("The note was modified concurrently. Please refresh and try again.");
                 }
             }
 
-            // If details were updated, regenerate tags
-            int tagCount = 0; // default
             if (detailsProvided)
             {
-                var generatedTags = await GenerateTags(request.Details!);
+                var generatedTags = await _tagGeneratorService.GenerateTagsAsync(request.Details!);
                 if (generatedTags.Count == 0)
                 {
                     return Problem(title: "AI Tag Generation Failed",
@@ -211,7 +179,6 @@ namespace HW2NoteKeeper.Controllers
                                   statusCode: 500);
                 }
 
-                // Remove all existing tags.
                 _context.Tags.RemoveRange(note.Tags);
                 try
                 {
@@ -219,17 +186,16 @@ namespace HW2NoteKeeper.Controllers
                 }
                 catch (DbUpdateConcurrencyException ex)
                 {
-                    _telemetryService.TrackException(ex, request);
                     _logger.LogError(ex, "Concurrency error deleting tags for note id {NoteId}", id);
                     return Conflict("The tags were modified concurrently. Please refresh and try again.");
                 }
 
-                // Reload the note to refresh the Tags collection.
                 note = await _context.Notes.Include(n => n.Tags).FirstOrDefaultAsync(n => n.Id == id);
                 if (note == null)
+                {
                     return NotFound();
+                }
 
-                // Create new tag entities from the generated tag names.
                 var newTags = generatedTags.Select(tagName => new Tag
                 {
                     Id = Guid.NewGuid(),
@@ -237,10 +203,9 @@ namespace HW2NoteKeeper.Controllers
                     NoteId = note.Id
                 }).ToList();
 
-                // Add the new tags.
                 _context.Tags.AddRange(newTags);
                 note.Tags = newTags;
-                tagCount = newTags.Count;
+                int tagCount = newTags.Count;
 
                 try
                 {
@@ -248,29 +213,10 @@ namespace HW2NoteKeeper.Controllers
                 }
                 catch (DbUpdateConcurrencyException ex)
                 {
-                    _telemetryService.TrackException(ex, request);
                     _logger.LogError(ex, "Concurrency error inserting new tags for note id {NoteId}", id);
                     return Conflict("The tags were modified concurrently. Please refresh your data and try again.");
                 }
             }
-
-            // Telemetry: track "NoteUpdated" event
-            // For the assignment:
-            // - If summary wasn't provided, use empty string => length = 0
-            // - If details wasn't provided, use empty string => length = 0, tagCount = 0
-            string updatedSummary = summaryProvided ? request.Summary! : string.Empty;
-            string updatedDetails = detailsProvided ? request.Details! : string.Empty;
-            int summaryLength = summaryProvided ? updatedSummary.Length : 0;
-            int detailsLength = detailsProvided ? updatedDetails.Length : 0;
-            int updatedTagCount = detailsProvided ? tagCount : 0;
-
-            _telemetryService.TrackNoteUpdatedEvent(
-                updatedSummary,
-                updatedDetails,
-                summaryLength,
-                detailsLength,
-                updatedTagCount
-            );
 
             return NoContent();
         }
@@ -279,7 +225,7 @@ namespace HW2NoteKeeper.Controllers
         /// Deletes a note and its associated tags.
         /// </summary>
         /// <param name="id">The note ID.</param>
-        /// <returns>No content on success.</returns>
+        /// <returns>No content if deletion is successful.</returns>
         /// <response code="204">Successfully deleted the note.</response>
         /// <response code="404">Note not found.</response>
         [HttpDelete("/notes/{id}")]
@@ -289,16 +235,52 @@ namespace HW2NoteKeeper.Controllers
         {
             if (id == Guid.Empty)
             {
-                _telemetryService.TrackValidationError("Invalid note ID.", new { id });
                 return BadRequest("Invalid note ID.");
             }
 
             var note = await _context.Notes.Include(n => n.Tags).FirstOrDefaultAsync(n => n.Id == id);
             if (note == null)
+            {
                 return NotFound();
+            }
 
-            _context.Notes.Remove(note);
-            await _context.SaveChangesAsync();
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                _context.Tags.RemoveRange(note.Tags);
+                await _context.SaveChangesAsync();
+
+                _context.Notes.Remove(note);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting note or its tags for noteId {NoteId}", id);
+                return StatusCode(500, "Error deleting note or its tags.");
+            }
+
+            // Delete attachments from Azure Blob Storage.
+            string storageConnectionString = _configuration.GetConnectionString("DefaultStorageConnection")!;
+            if (!string.IsNullOrEmpty(storageConnectionString))
+            {
+                string containerName = note.Id.ToString().ToLowerInvariant();
+                BlobContainerClient containerClient = new BlobContainerClient(storageConnectionString, containerName);
+                try
+                {
+                    await containerClient.DeleteIfExistsAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error deleting blob container {ContainerName}", containerName);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Storage connection string is not configured; skipping attachment deletion.");
+            }
+
             return NoContent();
         }
 
@@ -325,7 +307,7 @@ namespace HW2NoteKeeper.Controllers
         /// Retrieves all notes, optionally filtered by tag name.
         /// </summary>
         /// <param name="tagName">Optional filter by tag name.</param>
-        /// <returns>List of notes with simplified properties.</returns>
+        /// <returns>A list of notes with simplified properties.</returns>
         /// <response code="200">Notes retrieved successfully.</response>
         [HttpGet("/notes")]
         [ProducesResponseType(typeof(IEnumerable<object>), 200)]
@@ -354,7 +336,7 @@ namespace HW2NoteKeeper.Controllers
         /// <summary>
         /// Retrieves a list of unique tags.
         /// </summary>
-        /// <returns>List of unique tag objects with a 'name' property.</returns>
+        /// <returns>A list of unique tag objects with a 'name' property.</returns>
         /// <response code="200">Tags retrieved successfully.</response>
         [HttpGet("/tags")]
         [ProducesResponseType(typeof(IEnumerable<object>), 200)]
@@ -367,44 +349,6 @@ namespace HW2NoteKeeper.Controllers
 
             var result = distinctTagNames.Select(tagName => new { name = tagName });
             return Ok(result);
-        }
-
-        /// <summary>
-        /// Generates a list of tags based on note details using AI.
-        /// </summary>
-        /// <param name="details">The note details to analyze for generating tags.</param>
-        /// <returns>A list of one-word tags generated by the AI.</returns>
-        private async Task<List<string>> GenerateTags(string details)
-        {
-            var schema = NJsonSchema.JsonSchema.FromType<TagsResponse>();
-            string jsonSchemaString = schema.ToJson();
-
-            JsonElement jsonSchemaElement = JsonDocument.Parse(jsonSchemaString).RootElement;
-            var chatResponseFormatJson = ChatResponseFormat.ForJsonSchema(jsonSchemaElement, "ChatResponse", "Chat response schema");
-
-            ChatOptions chatOptions = new ChatOptions()
-            {
-                Temperature = _aISettings.Temperature,
-                TopP = _aISettings.TopP,
-                MaxOutputTokens = _aISettings.MaxOutputTokens,
-                ResponseFormat = chatResponseFormatJson
-            };
-
-            string enhancedPrompt = $"Generate a JSON output of relevant one-word tags based on: {details}";
-
-            try
-            {
-                ChatCompletion responseCompletion = await _chatClient.CompleteAsync(enhancedPrompt, options: chatOptions);
-                var response = JsonSerializer.Deserialize<TagsResponse>(responseCompletion.Message.Text!);
-                return response?.Phrases ?? new List<string>();
-            }
-            catch (Exception ex)
-            {
-                // Log exception
-                _telemetryService.TrackException(ex, new { details });
-                _logger.LogError(ex, "Error in GenerateTags");
-                return new List<string>();
-            }
         }
     }
 }
