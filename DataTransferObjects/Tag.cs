@@ -1,8 +1,7 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace HW2NoteKeeper.DataTransferObjects
+namespace HW3NoteKeeper.DataTransferObjects
 {
     /// <summary>
     /// Represents a tag associated with a note.

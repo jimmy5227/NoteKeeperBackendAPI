@@ -1,83 +1,67 @@
 using Azure;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
-using HW2NoteKeeper.Settings;
-using HW2NoteKeeper.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
-using HW2NoteKeeper.Middleware;
-using HW2NoteKeeper.Common;
-using Microsoft.ApplicationInsights;
+using HW3NoteKeeper.Data;
+using HW3NoteKeeper.Settings;
+using HW3NoteKeeper.Services;
+using System.Text.Json;
+using Microsoft.ApplicationInsights.Extensibility;
+using HW3NoteKeeper.CustomSettings;
 
-namespace HW2NoteKeeper
+namespace HW3NoteKeeper
 {
     /// <summary>
-    /// Entry point for the HW2NoteKeeper application.
+    /// Entry point for the HW3NoteKeeper application.
     /// </summary>
     public class Program
     {
         /// <summary>
-        /// Main method which configures and runs the web application.
+        /// Configures and runs the web application.
         /// </summary>
         /// <param name="args">Command-line arguments.</param>
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             // Create the web application builder.
             var builder = WebApplication.CreateBuilder(args);
 
-            // Load the secrets.json file.
-            builder.Configuration.AddJsonFile("secrets.json", optional: true, reloadOnChange: true);
-
-            // Retrieve the Application Insights connection string from configuration.
-            var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
-            if (!string.IsNullOrEmpty(appInsightsConnectionString))
-            {
-                Console.WriteLine("Application Insights is configured. Connection string found.");
-                builder.Services.AddApplicationInsightsTelemetry(options =>
-                {
-                    options.ConnectionString = appInsightsConnectionString;
-                });
-            }
-            else
-            {
-                Console.WriteLine("Warning: Application Insights Connection String is not configured.");
-            }
+            // Load configuration files.
+            builder.Configuration
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .AddJsonFile("secrets.json", optional: true, reloadOnChange: true);
 
             // Retrieve the connection string from configuration.
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-            // Register the ApplicationDbContext with SQL Server using the connection string.
+            // Register the ApplicationDbContext with SQL Server.
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlServer(connectionString));
 
-            // Bind the AISettings section from configuration to the AISettings class.
+            // Bind configuration sections to settings classes.
             builder.Services.Configure<AISettings>(builder.Configuration.GetSection("AISettings"));
+            builder.Services.Configure<NoteSettings>(builder.Configuration.GetSection("NoteSettings"));
 
-            // Create a logger factory for logging.
+            // Create a logger factory.
             var loggerFactory = LoggerFactory.Create(builder =>
             {
                 builder.AddConsole();
             });
 
-            // Enable Cross-Origin Resource Sharing (CORS) for requests from localhost.
+            // Configure CORS to allow requests from localhost.
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowLocalhost",
-                    policy =>
-                    {
-                        policy.WithOrigins("http://localhost:5198")
-                              .AllowAnyMethod()
-                              .AllowAnyHeader();
-                    });
+                options.AddPolicy("AllowLocalhost", policy =>
+                {
+                    policy.WithOrigins("http://localhost:5198")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
             });
 
-            // Configure controllers and JSON serialization options.
-            builder.Services.AddControllers()
-                .AddJsonOptions(options =>
-                {
-                    // Customize JSON options here if needed.
-                });
+            // Add controllers.
+            builder.Services.AddControllers();
 
             // Configure Swagger for API documentation.
             builder.Services.AddSwaggerGen(options =>
@@ -91,30 +75,33 @@ namespace HW2NoteKeeper
 
                 var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
                 options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
+
+                // Register custom file upload operation filter.
+                options.OperationFilter<SwaggerUploadFileParametersFilter>();
             });
 
             // Add endpoints API explorer (used by Swagger).
             builder.Services.AddEndpointsApiExplorer();
 
             // Retrieve and validate AISettings from configuration.
-            AISettings? _aiSettings = builder.Configuration.GetSection("AISettings").Get<AISettings>()!;
+            AISettings? aiSettings = builder.Configuration.GetSection("AISettings").Get<AISettings>();
             var logger = loggerFactory.CreateLogger("Program");
 
-            if (_aiSettings is null
-                || string.IsNullOrWhiteSpace(_aiSettings.DeploymentUri)
-                || string.IsNullOrWhiteSpace(_aiSettings.ApiKey))
+            if (aiSettings is null ||
+                string.IsNullOrWhiteSpace(aiSettings.DeploymentUri) ||
+                string.IsNullOrWhiteSpace(aiSettings.ApiKey))
             {
-                if (_aiSettings == null)
+                if (aiSettings == null)
                 {
                     logger.LogCritical("AISettings is null. Please ensure the configuration is present.");
                 }
                 else
                 {
-                    if (string.IsNullOrWhiteSpace(_aiSettings.DeploymentUri))
+                    if (string.IsNullOrWhiteSpace(aiSettings.DeploymentUri))
                     {
                         logger.LogCritical("AISettings.DeploymentUri is null or empty.");
                     }
-                    if (string.IsNullOrWhiteSpace(_aiSettings.ApiKey))
+                    if (string.IsNullOrWhiteSpace(aiSettings.ApiKey))
                     {
                         logger.LogCritical("AISettings.ApiKey is null or empty.");
                     }
@@ -124,26 +111,91 @@ namespace HW2NoteKeeper
 
             logger.LogInformation("AISettings loaded successfully.");
 
-            builder.Services.AddSingleton(_aiSettings);
-            builder.Services.AddSingleton<TelemetryService>();
+            builder.Services.AddSingleton(aiSettings);
 
-            // Register the OpenAI client with the provided settings.
-            Uri openAIServiceEndpointUri = new Uri(_aiSettings.DeploymentUri);
-            AzureKeyCredential apiKeyCredential = new AzureKeyCredential(_aiSettings.ApiKey);
-            RegisterOpenAIClient(builder, openAIServiceEndpointUri, apiKeyCredential, _aiSettings.DeploymentModelName);
+            // Register the OpenAI client.
+            Uri openAIServiceEndpointUri = new Uri(aiSettings.DeploymentUri);
+            AzureKeyCredential apiKeyCredential = new AzureKeyCredential(aiSettings.ApiKey);
+            RegisterOpenAIClient(builder, openAIServiceEndpointUri, apiKeyCredential, aiSettings.DeploymentModelName);
+
+            // Register the tag generator service.
+            builder.Services.AddScoped<ITagGeneratorService, TagGeneratorService>();
+
+            // Add Application Insights telemetry.
+            builder.Services.AddApplicationInsightsTelemetry();
+
+            // Register logging events.
+            builder.Services.AddSingleton<LoggingEvents>();
 
             // Build the application.
             var app = builder.Build();
 
-            // Verify TelemetryClient initialization
-            var telemetryClient = app.Services.GetService<TelemetryClient>();
-            if (telemetryClient != null)
+            // Seed the database at startup.
+            using (var scope = app.Services.CreateScope())
             {
-                Console.WriteLine("TelemetryClient initialized successfully. Application Insights is connected.");
-            }
-            else
-            {
-                Console.WriteLine("TelemetryClient is null. Application Insights may not be connected.");
+                try
+                {
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+                    var dbInitializerLogger = scope.ServiceProvider.GetRequiredService<ILogger<DBInitializer>>();
+                    var chatClient = scope.ServiceProvider.GetRequiredService<IChatClient>();
+
+                    // Ensure the database is created.
+                    dbContext.Database.EnsureCreated();
+
+                    // Create a DBInitializer instance.
+                    var dbInitializer = new DBInitializer(dbContext, configuration, dbInitializerLogger);
+
+                    // Seed data with AI-generated tags.
+                    await dbInitializer.EnsureSeedDataAsync(async (details) =>
+                    {
+                        var chatOptions = new ChatOptions
+                        {
+                            Temperature = 0.7f,
+                            TopP = 0.9f,
+                            MaxOutputTokens = 50
+                        };
+
+                        string enhancedPrompt = $@"
+                            You are an AI assistant that returns valid JSON output only. Do not include extra formatting.
+                            Return an object with a ""Phrases"" array containing one-word tags.
+                            Now generate relevant tags for this input:
+                            ""{details}""";
+
+                        var responseCompletion = await chatClient.CompleteAsync(enhancedPrompt, options: chatOptions);
+                        if (responseCompletion?.Message == null)
+                        {
+                            throw new InvalidOperationException("The chat completion or its message is null.");
+                        }
+
+                        var rawResponse = responseCompletion!.Message!.Text!.Trim('`').Trim();
+                        dbInitializerLogger.LogDebug("AI raw response (cleaned): {Response}", rawResponse);
+
+                        try
+                        {
+                            // Validate that the AI response is a valid JSON object.
+                            if (!rawResponse.StartsWith("{") || !rawResponse.EndsWith("}"))
+                            {
+                                throw new JsonException("AI response is not valid JSON.");
+                            }
+
+                            var response = JsonSerializer.Deserialize<TagsResponse>(rawResponse);
+                            return response?.Phrases ?? new List<string>();
+                        }
+                        catch (JsonException ex)
+                        {
+                            dbInitializerLogger.LogError(ex, "JSON Parsing Error during AI tag generation.");
+                            return new List<string>();
+                        }
+                    });
+
+                    dbInitializerLogger.LogInformation("Database seeding completed at startup.");
+                }
+                catch (Exception ex)
+                {
+                    var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+                    startupLogger.LogError(ex, "An error occurred while seeding the database.");
+                }
             }
 
             // Enable the defined CORS policy.
@@ -160,9 +212,11 @@ namespace HW2NoteKeeper
                 await next();
             });
 
+            // Serve default and static files.
             app.UseDefaultFiles();
             app.UseStaticFiles();
 
+            // Enable Swagger middleware.
             app.UseSwagger();
             app.UseSwaggerUI(options =>
             {
@@ -170,12 +224,11 @@ namespace HW2NoteKeeper
                 options.RoutePrefix = string.Empty;
             });
 
-            app.UseMiddleware<DatabaseInitializationMiddleware>();
-
             app.UseRouting();
             app.UseAuthorization();
             app.MapControllers();
 
+            // Run the application.
             app.Run();
         }
 
