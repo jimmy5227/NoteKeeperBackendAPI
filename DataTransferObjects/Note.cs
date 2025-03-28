@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 
-namespace HW3NoteKeeper.DataTransferObjects
+namespace HW4NoteKeeper.DataTransferObjects
 {
     /// <summary>
     /// Represents a note entity stored in the database and used for API responses.

@@ -1,10 +1,10 @@
 ﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using HW3NoteKeeper.Data;
-using HW3NoteKeeper.DataTransferObjects;
+using HW4NoteKeeper.Data;
+using HW4NoteKeeper.DataTransferObjects;
 using Microsoft.EntityFrameworkCore;
 
-namespace HW3NoteKeeper
+namespace HW4NoteKeeper
 {
     /// <summary>
     /// Encapsulates logic to seed the database with initial notes, AI-generated tags, and attachments.

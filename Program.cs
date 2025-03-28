@@ -4,17 +4,16 @@ using Microsoft.Extensions.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
-using HW3NoteKeeper.Data;
-using HW3NoteKeeper.Settings;
-using HW3NoteKeeper.Services;
+using HW4NoteKeeper.Data;
+using HW4NoteKeeper.Settings;
+using HW4NoteKeeper.Services;
 using System.Text.Json;
-using Microsoft.ApplicationInsights.Extensibility;
-using HW3NoteKeeper.CustomSettings;
+using HW4NoteKeeper.CustomSettings;
 
-namespace HW3NoteKeeper
+namespace HW4NoteKeeper
 {
     /// <summary>
-    /// Entry point for the HW3NoteKeeper application.
+    /// Entry point for the HW4NoteKeeper application.
     /// </summary>
     public class Program
     {

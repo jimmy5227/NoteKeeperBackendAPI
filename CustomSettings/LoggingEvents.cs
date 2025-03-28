@@ -1,7 +1,7 @@
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
 
-namespace HW3NoteKeeper.CustomSettings
+namespace HW4NoteKeeper.CustomSettings
 {
     /// <summary>
     /// Provides methods to track telemetry events and exceptions.

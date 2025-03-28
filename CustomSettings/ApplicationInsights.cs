@@ -1,4 +1,4 @@
-namespace HW3NoteKeeper.CustomSettings
+namespace HW4NoteKeeper.CustomSettings
 {
     /// <summary>
     /// Application insights settings

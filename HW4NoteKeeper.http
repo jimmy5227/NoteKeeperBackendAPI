@@ -1,0 +1,6 @@
+@HW4NoteKeeper_HostAddress = http://localhost:5288
+
+GET {{HW4NoteKeeper_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

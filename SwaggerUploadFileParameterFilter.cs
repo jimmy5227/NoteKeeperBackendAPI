@@ -4,7 +4,7 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 using System.Linq;
 using System.Collections.Generic;
 
-namespace HW3NoteKeeper
+namespace HW4NoteKeeper
 {
     /// <summary>
     /// Operation filter to enable file uploads using IFormFile in Swagger.

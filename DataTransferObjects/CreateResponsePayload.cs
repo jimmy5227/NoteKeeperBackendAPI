@@ -1,4 +1,4 @@
-﻿namespace HW3NoteKeeper.DataTransferObjects
+﻿namespace HW4NoteKeeper.DataTransferObjects
 {
     /// <summary>
     /// Defines the response structure when creating a note
