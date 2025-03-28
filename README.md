@@ -5,7 +5,7 @@ Personal note keeper project. Backend API REST Interface that supports, creation
 Contoso domain used as an UI for GPT interaction without code. <br />
 (Hosted on Free Tier. EXTREMELY SLOW TO LOAD! Est: 1 minute): <br />
 [https://hw1notekeepergpt.azurewebsites.net](https://hw1notekeepergpt.azurewebsites.net/) <br /><br />
-Current prompt in Program.cs set to:
+Current prompt in main Program.cs set to:
 > You are an AI assistant that returns valid JSON output only. Do not include extra formatting.
                             Return an object with a ""Phrases"" array containing one-word tags.
                             Now generate relevant tags for this input:
@@ -13,15 +13,15 @@ Current prompt in Program.cs set to:
 
 ## v1
 Domain (Hosted on Free Tier) <br />
-[mynotekeeper-cec7hdbxfkc2hgf6.eastus-01.azurewebsites.net](mynotekeeper-cec7hdbxfkc2hgf6.eastus-01.azurewebsites.net)
+[https://mynotekeeper-cec7hdbxfkc2hgf6.eastus-01.azurewebsites.net](https://mynotekeeper-cec7hdbxfkc2hgf6.eastus-01.azurewebsites.net)
 
 ## v2
 Domain (Hosted on Free Tier) <br />
-[hw2mynotekeeper-gwh0ayc4epgac7hu.eastus-01.azurewebsites.net](hw2mynotekeeper-gwh0ayc4epgac7hu.eastus-01.azurewebsites.net)
+[https://hw2mynotekeeper-gwh0ayc4epgac7hu.eastus-01.azurewebsites.net](https://hw2mynotekeeper-gwh0ayc4epgac7hu.eastus-01.azurewebsites.net)
 
 ## v3
 Domain (Hosted on Basic Tier) [Grading in Progress] <br />
-[hw3mynotekeeper-cghmekbgfwc9cehd.eastus-01.azurewebsites.net](hw3mynotekeeper-cghmekbgfwc9cehd.eastus-01.azurewebsites.net)
+[https://hw3mynotekeeper-cghmekbgfwc9cehd.eastus-01.azurewebsites.net](https://hw3mynotekeeper-cghmekbgfwc9cehd.eastus-01.azurewebsites.net)
 
 ## v4
 Domain (Hosted on Basic Tier) [Assignment due 4/3/2025] <br />
